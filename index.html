@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="旅遊阿焙焙">
+<meta name="theme-color" content="#EAF4FF">
+<meta name="robots" content="noindex, nofollow">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="style.css">
+<title>旅遊阿焙焙</title>
+</head>
+<body>
+<header class="topbar">
+  <!-- 焙子的插圖跟小助手阿焙焙同一批（art/make_baozi_art.py 產生） -->
+  <img class="logo" src="art/avatar.png" alt="">
+  <div class="topbar-text">
+    <h1>旅遊阿焙焙<img class="name-seed" src="art/seed.png" alt=""></h1>
+    <p id="topbar-sub">一起出去玩吧 ✈️</p>
+  </div>
+  <div class="topbar-right">
+    <span id="sync-status" class="sync-status"></span>
+    <button class="help-btn" data-action="open-settings" hidden>⚙️ 旅程設定</button>
+  </div>
+</header>
+
+<nav class="tabbar" hidden>
+  <div class="rail-brand">
+    <img src="art/avatar.png" alt="">
+    <b>旅遊阿焙焙<img class="name-seed" src="art/seed.png" alt=""></b>
+  </div>
+  <button data-tab="home"><span class="tab-icon">🏠</span><span>總覽</span></button>
+  <button data-tab="plan"><span class="tab-icon">🗺️</span><span>行程</span></button>
+  <button data-tab="list"><span class="tab-icon">🧳</span><span>清單</span></button>
+  <button data-tab="money"><span class="tab-icon">💰</span><span>花費</span></button>
+  <button data-tab="info"><span class="tab-icon">📒</span><span>資訊</span></button>
+  <button class="rail-only" data-action="open-settings"><span class="tab-icon">⚙️</span><span>旅程設定</span></button>
+</nav>
+
+<main id="view"></main>
+
+<div id="fab-root"></div>
+<div id="sheet-root"></div>
+<div id="toast" role="status"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
