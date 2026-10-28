@@ -531,7 +531,8 @@ function renderHomeMoney() {
   return `
     <section class="card">
       <h2 class="card-title">💰 花費<button class="btn small ghost" data-tab-go="money">看明細</button></h2>
-      <div class="money-big">${s.groups.map(g => moneyText(g.total, g.cur)).join(' ＋ ')}</div>
+      ${s.groups.map(g => `
+        <div class="money-line"><small>${g.cur === 'TWD' ? '台幣總額' : `${esc(curLabel('local'))}總額`}</small><b>${moneyText(g.total, g.cur)}</b></div>`).join('')}
       <p class="hint">共 ${s.count} 筆${meBal ? `・${meBal}` : ''}</p>
     </section>`;
 }
@@ -540,7 +541,7 @@ function renderFeed() {
   const recent = Object.values(store.items)
     .filter(item => item.by && item.by !== sync.me && item.type)
     .sort((a, b) => b.at - a.at)
-    .slice(0, 6);
+    .slice(0, 4);
   if (!recent.length) return '';
   return `
     <section class="card">
