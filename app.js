@@ -365,6 +365,20 @@ function inviteLink() {
   return `${location.origin}${location.pathname}${SYNC_NS !== 'main' ? `?ns=${SYNC_NS}` : ''}#j=${code}`;
 }
 
+// 從主畫面（iPhone「加入主畫面」、Android 安裝）打開的
+function isStandalone() {
+  return navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+}
+
+// iPhone 主畫面的 App 跟 Safari 是分開存資料的：在瀏覽器裡時讓網址一直帶著邀請碼，
+// 「加入主畫面」存下來的網址才會帶著它，主畫面 App 第一次打開就自動連上
+function keepInviteInUrl() {
+  if (isStandalone()) return;
+  const hash = sync.key ? new URL(inviteLink()).hash : '';
+  if (location.hash === hash) return;
+  history.replaceState(null, '', location.pathname + location.search + hash);
+}
+
 function parseInvite(text) {
   const m = /#j=([A-Za-z0-9_-]+)/.exec(text || '');
   if (!m) return null;
@@ -1018,8 +1032,10 @@ function renderJoin() {
     </section>
     <section class="card">
       <h2 class="card-title">🔗 加入旅程</h2>
+      ${isStandalone() ? '<p class="notice">📱 從主畫面打開的 App 要再加入一次：先在 LINE 長按邀請連結「複製」，再按下面的「📋 貼上邀請連結」</p>' : ''}
       <p class="hint">請找傳旅程給你的人要「邀請連結」，直接點開就會自動加入；或是把連結貼在下面。</p>
-      <textarea id="join-link" class="textarea short" placeholder="貼上邀請連結"></textarea>
+      <button class="btn block paste-btn" data-action="paste-invite">📋 貼上邀請連結</button>
+      <textarea id="join-link" class="textarea short" placeholder="或是手動貼在這裡"></textarea>
       <details class="advanced">
         <summary>我是建立旅程的人（貼雲端網址和連線碼）</summary>
         <label class="field-label" for="join-url">雲端網址</label>
@@ -1129,7 +1145,7 @@ function openSettingsSheet() {
       <section class="card">
         <h2 class="card-title">📱 放到手機桌面</h2>
         <ul class="help-list">
-          <li><b>iPhone：</b>用 Safari 打開 → 下方「分享」按鈕 → 往下滑「加入主畫面」。從 LINE 點開的話，先按右下角選「用 Safari 開啟」</li>
+          <li><b>iPhone：</b>用 Safari 打開 → 下方「分享」按鈕 → 往下滑「加入主畫面」。從 LINE 點開的話，先按右下角選「用 Safari 開啟」。主畫面的 App 第一次打開如果要你加入旅程，複製邀請連結後按「📋 貼上邀請連結」就好，行程資料都在雲端不會不見</li>
           <li><b>Android：</b>用 Chrome 打開 → 右上角 ⋮ →「加到主畫面」或「安裝應用程式」</li>
           <li><b>電腦：</b>用 Chrome 打開 → 網址列右邊的「安裝」圖示，就會變成一個獨立的視窗</li>
         </ul>
@@ -1254,6 +1270,20 @@ const actions = {
     setSyncStatus('', '');
     render();
   }),
+  'paste-invite': async () => {
+    let text = '';
+    try {
+      text = await navigator.clipboard.readText();
+    } catch (e) {
+      toast('沒辦法讀剪貼簿，請長按下面的框框選「貼上」', 2600);
+      $('#join-link').focus();
+      return;
+    }
+    const conn = parseInvite(text);
+    if (!conn) { ui.joinError = '剪貼簿裡不是邀請連結～請先複製完整的邀請連結（裡面會有 #j=）'; render(); return; }
+    $('#join-link').value = text;
+    connect(conn);
+  },
   'join': () => {
     const conn = parseInvite($('#join-link').value)
       || ($('#join-url').value.trim() && $('#join-key').value.trim() ? { url: $('#join-url').value.trim(), key: $('#join-key').value.trim() } : null);
@@ -1374,13 +1404,13 @@ function render() {
     : ui.tab === 'home' && p.phase === 'during' ? `旅程第 ${p.dayNo} 天，玩得開心 🎒`
     : ui.tab === 'home' && p.phase === 'before' ? `再 ${p.left} 天就出發 ✈️`
     : TAB_SUBTITLES[ui.tab];
+  keepInviteInUrl();
 }
 
-// 打開時處理邀請連結（#j=...），處理完把它從網址列拿掉，避免被截圖或轉傳出去
+// 打開時處理邀請連結（#j=...）
 (() => {
   const conn = parseInvite(location.hash);
   if (!conn) return;
-  history.replaceState(null, '', location.pathname + location.search);
   if (conn.url === sync.url && conn.key === sync.key) return;
   connect(conn);
 })();

@@ -1,7 +1,6 @@
 {
   "name": "旅遊阿焙焙",
   "short_name": "旅遊阿焙焙",
-  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#EAF4FF",
