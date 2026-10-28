@@ -116,6 +116,16 @@ function linkify(text) {
   return esc(text).replace(/https?:\/\/[^\s<]+/g, url => `<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
 }
 
+// 只讓 http／https 的網址變成連結，雲端資料被塞 javascript: 之類的也不會被執行
+function safeUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : '';
+  } catch (e) {
+    return '';
+  }
+}
+
 function mapUrl(place) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
 }
@@ -252,10 +262,12 @@ function isForeign() {
   return !!cur && cur !== '台幣';
 }
 
-// 改一筆資料：at 一定比舊的大（手機時間不準也不會比自己上一次舊），存起來、重畫、排隊上傳
+// 改一筆資料：at 一定比舊的大（手機時間不準也不會比自己上一次舊），存起來、重畫、排隊上傳。
+// base 記「這次是改哪一版雲端資料」：雲端看到 base 對得上就一定收，不會因為手機時間比別人慢被丟掉
 function put(item, act = '修改') {
   const old = store.items[item.id];
-  const next = Object.assign({}, item, { at: Math.max(Date.now(), old ? old.at + 1 : 0), by: sync.me || '', act });
+  const base = store.pending[item.id] ? store.pending[item.id].base : (old ? old.at : 0);
+  const next = Object.assign({}, item, { at: Math.max(Date.now(), old ? old.at + 1 : 0), base, by: sync.me || '', act });
   store.items[next.id] = next;
   store.pending[next.id] = next;
   saveStore();
@@ -317,6 +329,9 @@ async function syncNow() {
     setSyncStatus('offline', result.error === 'bad key' ? '⚠️ 連線碼不對' : '⚠️ 雲端出錯');
     return;
   }
+  // 雲端沒收的（同一筆被別人用比較新的版本改過）就改用雲端的版本，並告訴她
+  const rejected = (result.rejected || []).filter(id => ops.some(op => op.id === id));
+  if (rejected.length) toast(`有 ${rejected.length} 筆修改跟旅伴同時改到，已改用對方較新的版本`, 3200);
   // 傳上去之後又改過的（at 不一樣）要留著下一輪再送
   ops.forEach(op => {
     if (store.pending[op.id] && store.pending[op.id].at === op.at) delete store.pending[op.id];
@@ -609,7 +624,7 @@ function planItemHtml(item, isNext) {
         <div class="tl-head"><b>${esc(item.title)}</b>${isNext ? '<span class="next-tag">下一站</span>' : ''}<span class="tl-cat">${cat.label}</span></div>
         ${item.place ? `<a class="tl-place" href="${mapUrl(item.place)}" target="_blank" rel="noopener">📍 ${esc(item.place)}</a>` : ''}
         ${item.note ? `<p class="tl-note">${linkify(item.note)}</p>` : ''}
-        ${item.url ? `<a class="tl-link" href="${esc(item.url)}" target="_blank" rel="noopener">🔗 相關連結</a>` : ''}
+        ${safeUrl(item.url) ? `<a class="tl-link" href="${esc(safeUrl(item.url))}" target="_blank" rel="noopener">🔗 相關連結</a>` : ''}
         <span class="tl-by">${item.by ? `${esc(item.by)} · ` : ''}${agoText(item.at)}${item.act === '新增' ? '新增' : '更新'}</span>
       </div>
     </article>`;
@@ -688,7 +703,8 @@ function openPlanSheet(id) {
     const title = $('#f-title', overlay).value.trim();
     if (!title) { toast('先填名稱喔'); return false; }
     let url = $('#f-url', overlay).value.trim();
-    if (url && !/^https?:\/\//.test(url)) url = 'https://' + url;
+    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+    if (url && !safeUrl(url)) { toast('連結看起來不對，檢查一下'); return false; }
     const day = $('#f-day', overlay).value;
     put({
       id: old ? old.id : uid(), type: 'plan', cat: chipValue(overlay, 'cat') || 'other', title,
@@ -919,7 +935,10 @@ function openExpenseSheet(id) {
   });
   bindFormButtons(overlay, () => {
     const title = $('#f-title', overlay).value.trim();
-    const amount = Number($('#f-amount', overlay).value.replace(/,/g, ''));
+    const cur = isForeign() ? (chipValue(overlay, 'cur') || 'local') : 'TWD';
+    // 台幣沒有小數，存整數，結算加起來才會剛好
+    let amount = Number($('#f-amount', overlay).value.replace(/,/g, ''));
+    if (cur === 'TWD') amount = Math.round(amount);
     const payer = chipValue(overlay, 'payer');
     const split = chipValues(overlay, 'split');
     if (!title) { toast('先寫買了什麼喔'); return false; }
@@ -928,7 +947,7 @@ function openExpenseSheet(id) {
     if (!split.length) { toast('至少選一個人分'); return false; }
     put({
       id: old ? old.id : uid(), type: 'expense', title, amount,
-      cur: isForeign() ? (chipValue(overlay, 'cur') || 'local') : 'TWD',
+      cur,
       day: $('#f-day', overlay).value, payer, split,
     }, old ? '修改' : '新增');
     toast(old ? '改好了 ✨' : '記下來了 💰');
@@ -1383,7 +1402,27 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('online', () => pullFromCloud());
 window.addEventListener('pagehide', () => { syncRun.unloading = true; });
-window.addEventListener('pageshow', () => { syncRun.unloading = false; });
+window.addEventListener('pageshow', () => { syncRun.unloading = false; pullFromCloud(3000); });
+// 同一台電腦開了兩個視窗（例如 exe 和瀏覽器分頁）：另一個視窗存檔時把它的資料併進來，
+// 自己還沒上傳、而且比較新的修改留著，才不會互相蓋掉
+window.addEventListener('storage', e => {
+  if (e.key !== STORAGE_KEY + ':' + SYNC_NS || !e.newValue) return;
+  let other;
+  try { other = JSON.parse(e.newValue); } catch (err) { return; }
+  if (!other || !other.items || !other.pending) return;
+  const pending = Object.assign({}, other.pending);
+  Object.values(store.pending).forEach(mine => {
+    const theirs = other.items[mine.id];
+    if (!theirs || theirs.at < mine.at) pending[mine.id] = mine;
+  });
+  // 兩邊的資料逐筆比，留 at 比較新的那份（不整份換掉，自己有、另一個視窗還沒抓到的也會留著）
+  const items = Object.assign({}, store.items);
+  Object.values(other.items).forEach(item => {
+    if (!items[item.id] || items[item.id].at < item.at) items[item.id] = item;
+  });
+  store = { items: Object.assign(items, pending), pending, loaded: store.loaded || other.loaded };
+  render();
+});
 
 // 出國網路不穩：用 service worker 把畫面檔案存起來，沒網路也打得開（只在正式網址 https 啟用）
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
